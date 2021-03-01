@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //
@@ -78,13 +79,26 @@ func (e Entry) String() string {
 		e.Domain(), sTTL, e.Class(), e.Type(), e.Values())
 }
 
+func containsLetter(s string) bool {
+	return strings.ContainsAny(strings.ToUpper(s), "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+}
+
 // The TTL specified for the entry
 func (e Entry) TTL() *int {
 	is := e.find(useTTL)
 	if len(is) == 0 {
 		return nil
 	}
-	i, _ := strconv.Atoi(string(e.tokens[is[0]].t.Value()))
+
+	v := string(e.tokens[is[0]].t.Value())
+	var i int
+	if containsLetter(v) {
+		d, _ := time.ParseDuration(v)
+		i = int(d.Seconds())
+	} else {
+		i, _ = strconv.Atoi(string(e.tokens[is[0]].t.Value()))
+	}
+
 	return &i
 }
 
@@ -565,11 +579,19 @@ func parseLine(line []token) (e Entry, err ParsingError) {
 		}
 
 		// Ok, it must be a TTL
-		_, err2 := strconv.Atoi(string(e.tokens[i].t.Value()))
-		if err2 != nil {
-			err = newParsingError("invalid type/class/ttl", e.tokens[i].t)
-			return
+		if containsLetter(string(e.tokens[i].t.Value())) {
+			if _, err2 := time.ParseDuration(string(e.tokens[i].t.Value())); err2 != nil {
+				err = newParsingError("invalid type/class/ttl", e.tokens[i].t)
+				return
+			}
+		} else {
+			_, err2 := strconv.Atoi(string(e.tokens[i].t.Value()))
+			if err2 != nil {
+				err = newParsingError("invalid type/class/ttl", e.tokens[i].t)
+				return
+			}
 		}
+
 		if foundTTL {
 			err = newParsingError("double TTL", e.tokens[i].t)
 			return
